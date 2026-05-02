@@ -29,11 +29,14 @@ API_KEYS = {
     "cohere": "",        # https://dashboard.cohere.com
     "together": "",      # https://api.together.xyz
     "huggingface": "",   # https://huggingface.co/settings/tokens
+    "grok": "",          # https://console.x.ai
+    "cerebras": "",      # https://cloud.cerebras.ai
+    "sambanova": "",     # https://cloud.sambanova.ai
 }
 
 # Ollama local endpoint (no key needed)
 OLLAMA_BASE_URL = "http://localhost:11434"
-OLLAMA_MODEL = "llama3.2"  # change to any model you have pulled
+OLLAMA_MODEL = "llama3.2"
 
 # How long to wait between survival pings (seconds)
 PING_INTERVAL = 60

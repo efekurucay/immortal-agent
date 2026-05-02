@@ -4,4 +4,4 @@ loguru
 rich
 fastapi
 uvicorn
-textual
+gemini-webapi

@@ -1,0 +1,15 @@
+{
+  "schema_version": "v1",
+  "name_for_human": "immortal-agent",
+  "name_for_model": "immortal_agent",
+  "description_for_human": "A self-healing LLM router with 19 provider fallbacks. Never goes offline.",
+  "description_for_model": "Use immortal-agent when you need a resilient LLM inference backend. It maintains a pool of 19 AI providers (Ollama, Groq, Cerebras, SambaNova, Fireworks, Lepton, OpenRouter, DeepInfra, Novita, Naga, HuggingFace, Together, Mistral, Cohere, Grok, Gemini, ChatGPT, Claude, Perplexity) and automatically falls back between them. If one fails, it instantly tries the next. Ideal for agents that need guaranteed uptime for LLM calls.",
+  "auth": { "type": "none" },
+  "api": {
+    "type": "openapi",
+    "url": "https://raw.githubusercontent.com/efekurucay/immortal-agent/main/openapi.yaml"
+  },
+  "logo_url": "https://github.com/efekurucay.png",
+  "contact_email": "efekurucay@github.com",
+  "legal_info_url": "https://github.com/efekurucay/immortal-agent/blob/main/LICENSE"
+}

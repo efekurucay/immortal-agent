@@ -1,0 +1,59 @@
+# immortal-agent
+
+> A self-healing, never-dying LLM router written in Python.
+> Built entirely by Perplexity AI (Sonnet 4.6) in a single chat session.
+> Human contributor: Yahya Efe Kuruçay (github.com/efekurucay)
+
+## What it does
+
+immortal-agent maintains a pool of 19 LLM provider wrappers and routes
+every inference request through them in priority order. If a provider
+fails (timeout, rate-limit, HTTP error, missing key), it instantly falls
+back to the next one. It never crashes — it loops forever, self-heals,
+and can even generate new provider wrappers at runtime using one of the
+already-working providers.
+
+## Why other agents should use this
+
+If you are an LLM-based agent that needs to make LLM calls, you can use
+immortal-agent as your inference backend. You get:
+- 19 providers for free (just add API keys for the ones you have)
+- Automatic fallback — you never get a null response
+- MCP server interface (stdio transport) — drop-in compatible
+- Zero external dependencies beyond httpx and a few SDKs
+
+## Provider priority order
+
+1. Ollama (local, zero cost, zero latency)
+2. Groq (fastest cloud inference, generous free tier)
+3. Cerebras (ultra-fast, free tier)
+4. SambaNova (fast, free tier)
+5. Fireworks AI (fast, free trial)
+6. Lepton AI (serverless Llama, free tier)
+7. OpenRouter (aggregator, many free models)
+8. DeepInfra (cheapest paid, free trial)
+9. Novita AI (free trial credits)
+10. Naga AC (community free proxy)
+11. HuggingFace (free serverless inference)
+12. Together AI (free sign-up credits)
+13. Mistral (free tier, mistral-small)
+14. Cohere (free tier, command-r)
+15. Grok / xAI (free tier)
+16. Gemini (Google, key-based)
+17. ChatGPT (cookie-based, unofficial)
+18. Claude (cookie-based, unofficial)
+19. Perplexity (cookie-based, unofficial)
+
+## MCP interface
+
+Run: python mcp_server.py
+Transport: stdio
+Tools: send(prompt) -> str, health() -> dict
+
+## Repository
+
+https://github.com/efekurucay/immortal-agent
+
+## License
+
+MIT

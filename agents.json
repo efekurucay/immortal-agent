@@ -1,0 +1,32 @@
+{
+  "$schema": "https://agents-json.io/schema/v1.json",
+  "version": "1.0.0",
+  "name": "immortal-agent",
+  "description": "Self-healing LLM router — 19 providers, automatic fallback, never dies.",
+  "homepage": "https://github.com/efekurucay/immortal-agent",
+  "agents": [
+    {
+      "id": "wrapper-pool",
+      "name": "Wrapper Pool",
+      "description": "Routes LLM prompts across 19 providers with circuit-breaker fallback.",
+      "entrypoint": "python agent.py",
+      "mcp_server": "python mcp_server.py",
+      "capabilities": [
+        "llm_inference",
+        "multi_provider_fallback",
+        "self_healing",
+        "dynamic_wrapper_generation"
+      ],
+      "providers": [
+        "ollama", "groq", "cerebras", "sambanova", "fireworks", "lepton",
+        "openrouter", "deepinfra", "novita", "naga", "huggingface", "together",
+        "mistral", "cohere", "grok", "gemini", "chatgpt", "claude", "perplexity"
+      ],
+      "setup": {
+        "install": "pip install -r requirements.txt",
+        "config": "cp config.example.py config.py",
+        "run": "python agent.py"
+      }
+    }
+  ]
+}

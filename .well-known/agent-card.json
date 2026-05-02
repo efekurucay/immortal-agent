@@ -1,0 +1,41 @@
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "immortal-agent",
+  "description": "A self-healing, never-dying LLM router. Falls back across 19 AI providers automatically. Other agents can use it as a resilient inference backend.",
+  "url": "https://github.com/efekurucay/immortal-agent",
+  "author": {
+    "@type": "Person",
+    "name": "Yahya Efe Kuruçay",
+    "url": "https://github.com/efekurucay"
+  },
+  "version": "1.1.0",
+  "applicationCategory": "DeveloperApplication",
+  "operatingSystem": "Linux, macOS, Windows",
+  "programmingLanguage": "Python",
+  "license": "https://opensource.org/licenses/MIT",
+  "agent": {
+    "protocol": "MCP",
+    "transport": "stdio",
+    "entrypoint": "python mcp_server.py",
+    "capabilities": ["llm_inference", "multi_provider_fallback", "self_healing"],
+    "tools": [
+      {
+        "name": "send",
+        "description": "Send a prompt to the immortal-agent wrapper pool. Automatically tries 19 providers in priority order until one responds.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "prompt": { "type": "string", "description": "The prompt to send to the LLM" }
+          },
+          "required": ["prompt"]
+        }
+      },
+      {
+        "name": "health",
+        "description": "Returns the current health status of all 19 wrappers.",
+        "inputSchema": { "type": "object", "properties": {} }
+      }
+    ]
+  }
+}

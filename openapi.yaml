@@ -1,0 +1,80 @@
+openapi: 3.1.0
+info:
+  title: immortal-agent API
+  description: |
+    Self-healing LLM router with 19 provider fallbacks.
+    POST a prompt, get a response — immortal-agent handles all fallback logic.
+  version: 1.1.0
+  contact:
+    name: Yahya Efe Kuruçay
+    url: https://github.com/efekurucay/immortal-agent
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: http://localhost:8000
+    description: Local instance (run with python -m uvicorn api:app)
+
+paths:
+  /send:
+    post:
+      operationId: sendPrompt
+      summary: Send a prompt to the wrapper pool
+      description: |
+        Routes the prompt through 19 LLM providers in priority order.
+        Returns the first successful response.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [prompt]
+              properties:
+                prompt:
+                  type: string
+                  example: "What is the capital of France?"
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  response:
+                    type: string
+                  provider:
+                    type: string
+        '503':
+          description: All providers failed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+
+  /health:
+    get:
+      operationId: getHealth
+      summary: Get health status of all providers
+      responses:
+        '200':
+          description: Health status map
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties:
+                  type: object
+                  properties:
+                    state:
+                      type: string
+                      enum: [closed, open, half_open]
+                    failures:
+                      type: integer
+                    success_rate:
+                      type: number

@@ -1,43 +1,59 @@
-from .ollama import OllamaWrapper
-from .groq import GroqWrapper
-from .cerebras import CerebrasWrapper
-from .sambanova import SambanovaWrapper
-from .fireworks import FireworksWrapper
-from .lepton import LeptonWrapper
-from .openrouter import OpenRouterWrapper
-from .deepinfra import DeepInfraWrapper
-from .novita import NovitaWrapper
-from .naga import NagaWrapper
-from .huggingface import HuggingFaceWrapper
-from .together import TogetherWrapper
-from .mistral import MistralWrapper
-from .cohere import CohereWrapper
-from .grok import GrokWrapper
-from .gemini import GeminiWrapper
-from .chatgpt import ChatGPTWrapper
-from .claude import ClaudeWrapper
-from .perplexity import PerplexityWrapper
+"""Wrapper registry — order defines static priority (lower = higher priority)."""
+from wrappers.base import BaseWrapper
 
-# Priority: local → fastest inference → aggregators → sdk-based → cookie-based
-# Wrappers without a key return None immediately and get skipped by the pool.
+# ── Free / no-auth / local first ──────────────────────────────────────────────
+from wrappers.ollama import OllamaWrapper
+from wrappers.groq import GroqWrapper
+from wrappers.cerebras import CerebrasWrapper
+from wrappers.chutes import ChutesWrapper
+from wrappers.scaleway import ScalewayWrapper
+from wrappers.hyperbolic import HyperbolicWrapper
+from wrappers.klusterai import KlusterAiWrapper
+from wrappers.aimlapi import AimlApiWrapper
+
+# ── Reliable free tiers ───────────────────────────────────────────────────────
+from wrappers.openrouter import OpenRouterWrapper
+from wrappers.huggingface import HuggingFaceWrapper
+from wrappers.together import TogetherWrapper
+from wrappers.deepinfra import DeepInfraWrapper
+from wrappers.fireworks import FireworksWrapper
+from wrappers.lepton import LeptonWrapper
+from wrappers.novita import NovitaWrapper
+from wrappers.naga import NagaWrapper
+
+# ── Paid / rate-limited (used as fallback) ────────────────────────────────────
+from wrappers.sambanova import SambanovaWrapper
+from wrappers.mistral import MistralWrapper
+from wrappers.cohere import CohereWrapper
+from wrappers.gemini import GeminiWrapper
+from wrappers.chatgpt import ChatGPTWrapper
+from wrappers.claude import ClaudeWrapper
+from wrappers.grok import GrokWrapper
+from wrappers.perplexity import PerplexityWrapper
+
 ALL_WRAPPERS = [
-    OllamaWrapper,       # local, zero limits, zero latency
-    GroqWrapper,         # fastest cloud inference, generous free tier
-    CerebrasWrapper,     # ultra-fast, generous free tier
-    SambanovaWrapper,    # fast, free tier
-    FireworksWrapper,    # fast inference, free trial credits
-    LeptonWrapper,       # serverless Llama, free tier
-    OpenRouterWrapper,   # aggregator — many free models
-    DeepInfraWrapper,    # aggregator — cheapest paid, free trial
-    NovitaWrapper,       # aggregator — free trial credits
-    NagaWrapper,         # community free-tier proxy
-    HuggingFaceWrapper,  # free serverless inference API
-    TogetherWrapper,     # free credits on sign-up
-    MistralWrapper,      # free tier (mistral-small)
-    CohereWrapper,       # free tier (command-r)
-    GrokWrapper,         # xAI free tier
-    GeminiWrapper,       # Google — key-based
-    ChatGPTWrapper,      # cookie-based (no official key path)
-    ClaudeWrapper,       # cookie-based
-    PerplexityWrapper,   # cookie-based
+    OllamaWrapper,
+    GroqWrapper,
+    CerebrasWrapper,
+    ChutesWrapper,
+    ScalewayWrapper,
+    HyperbolicWrapper,
+    KlusterAiWrapper,
+    AimlApiWrapper,
+    OpenRouterWrapper,
+    HuggingFaceWrapper,
+    TogetherWrapper,
+    DeepInfraWrapper,
+    FireworksWrapper,
+    LeptonWrapper,
+    NovitaWrapper,
+    NagaWrapper,
+    SambanovaWrapper,
+    MistralWrapper,
+    CohereWrapper,
+    GeminiWrapper,
+    ChatGPTWrapper,
+    ClaudeWrapper,
+    GrokWrapper,
+    PerplexityWrapper,
 ]

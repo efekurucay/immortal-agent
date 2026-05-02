@@ -1,111 +1,126 @@
-"""Live terminal dashboard for Immortal Agent using Rich."""
+"""
+dashboard.py — Live Rich terminal dashboard for ImmortalAgent.
+
+Shows:
+  - Agent uptime + generation counter
+  - Per-wrapper: status, health score, success/fail counts, P95 latency, circuit state
+  - Rate budget gauge
+  - Last 10 events
+
+Usage: python dashboard.py
+"""
+from __future__ import annotations
 
 import asyncio
+import time
 from datetime import datetime
 
-from rich.console import Console
-from rich.table import Table
-from rich.panel import Panel
-from rich.layout import Layout
-from rich.live import Live
-from rich.text import Text
+try:
+    from rich.console import Console
+    from rich.layout import Layout
+    from rich.live import Live
+    from rich.panel import Panel
+    from rich.table import Table
+    from rich.text import Text
+except ImportError:
+    raise ImportError("pip install rich")
 
 from memory import init_db, get_wrapper_stats, get_recent_events
-
+from rate_budget import BUDGET
 
 console = Console()
+_start_time = time.time()
 
 
-def _make_wrapper_table(stats) -> Table:
-    table = Table(title="Wrapper Health", expand=True)
-    table.add_column("Name", style="cyan", no_wrap=True)
-    table.add_column("Status")
-    table.add_column("Health", justify="right")
-    table.add_column("Fails", justify="right")
-    table.add_column("Succ", justify="right")
-    table.add_column("Avg Latency (ms)", justify="right")
+def _uptime() -> str:
+    s = int(time.time() - _start_time)
+    h, rem = divmod(s, 3600)
+    m, sec = divmod(rem, 60)
+    return f"{h:02d}:{m:02d}:{sec:02d}"
+
+
+def _health_color(score: float) -> str:
+    if score >= 0.75:
+        return "green"
+    if score >= 0.4:
+        return "yellow"
+    return "red"
+
+
+async def _build_layout() -> Layout:
+    stats = await get_wrapper_stats()
+    events = await get_recent_events(10)
+    budget = BUDGET.stats()
+
+    # ── Wrapper table ──────────────────────────────────────────────
+    tbl = Table(title="Wrappers", expand=True, border_style="dim")
+    tbl.add_column("Name", style="bold")
+    tbl.add_column("Status", justify="center")
+    tbl.add_column("Health", justify="right")
+    tbl.add_column("Succ", justify="right")
+    tbl.add_column("Fail", justify="right")
+    tbl.add_column("AvgLat", justify="right")
 
     for s in stats:
-        total_calls = (s.get("success_count") or 0) + (s.get("fail_count") or 0)
-        avg_latency = 0
-        if total_calls > 0:
-            avg_latency = int((s.get("total_latency_ms") or 0) / total_calls)
-
-        status_icon = "✅" if s.get("status") == "alive" else "💀"
-        health = s.get("health_score") or 0.0
-        table.add_row(
-            s["name"],
-            status_icon + " " + (s.get("status") or ""),
-            f"{health:.2f}",
-            str(s.get("fail_count") or 0),
-            str(s.get("success_count") or 0),
-            str(avg_latency),
+        name = s["name"]
+        status = s.get("status", "?")
+        score = float(s.get("health_score") or 0)
+        succ = s.get("success_count", 0)
+        fail = s.get("fail_count", 0)
+        total = max(succ + fail, 1)
+        avg_lat = int((s.get("total_latency_ms") or 0) / total)
+        color = _health_color(score)
+        tbl.add_row(
+            name,
+            Text("✅" if status == "alive" else "💀", justify="center"),
+            Text(f"{score:.2f}", style=color),
+            str(succ),
+            str(fail),
+            f"{avg_lat}ms",
         )
 
-    return table
-
-
-def _make_events_panel(events) -> Panel:
-    lines: list[str] = []
+    # ── Event log ─────────────────────────────────────────────────
+    ev_lines = []
     for e in events:
-        ts = (e.get("timestamp") or "")[:19]
-        etype = e.get("event_type") or "event"
-        name = e.get("wrapper_name") or "-"
-        icon = {
-            "alive": "💚",
-            "ping_success": "💚",
-            "ping_failed": "🔴",
-            "all_dead": "💀",
-            "repair_failed": "🔧",
-            "wrapper_installed": "✨",
-        }.get(etype, "•")
-        lines.append(f"{icon} [{ts}] {etype} — {name}")
+        ts = e.get("timestamp", "")[:19]
+        etype = e.get("event_type", "")
+        wname = e.get("wrapper_name", "")
+        ev_lines.append(f"[dim]{ts}[/dim] [bold]{etype}[/bold] [cyan]{wname}[/cyan]")
+    ev_panel = Panel(
+        "\n".join(ev_lines) or "No events yet",
+        title="Recent Events",
+        border_style="dim",
+    )
 
-    text = "\n".join(lines) if lines else "No events yet. Run agent.py first."
-    return Panel(Text(text), title="Recent Events", border_style="magenta")
+    # ── Header ────────────────────────────────────────────────────
+    alive = sum(1 for s in stats if s.get("status") == "alive")
+    rpm = budget["calls_this_minute"]
+    header = Panel(
+        f"🧬 [bold green]ImmortalAgent v3.0[/bold green]  "
+        f"uptime=[yellow]{_uptime()}[/yellow]  "
+        f"alive=[green]{alive}/{len(stats)}[/green]  "
+        f"rpm=[cyan]{rpm}/{budget['max_rpm']}[/cyan]  "
+        f"[dim]{datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')} UTC[/dim]",
+        border_style="green",
+    )
 
-
-def _make_header() -> Panel:
-    now = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
-    title = Text(" IMMORTAL AGENT Dashboard ", style="bold white on blue")
-    subtitle = Text(f"  {now}", style="dim")
-    body = Text.assemble(title, "\n", subtitle)
-    return Panel(body, style="bold")
-
-
-def _make_layout(stats, events) -> Layout:
     layout = Layout()
     layout.split_column(
-        Layout(name="header", size=3),
-        Layout(name="body", ratio=1),
+        Layout(header, size=3),
+        Layout(tbl, ratio=2),
+        Layout(ev_panel, ratio=1),
     )
-    layout["body"].split_row(
-        Layout(name="left", ratio=3),
-        Layout(name="right", ratio=2),
-    )
-
-    layout["header"].update(_make_header())
-    layout["left"].update(_make_wrapper_table(stats))
-    layout["right"].update(_make_events_panel(events))
     return layout
 
 
-async def _refresh(live: Live, refresh_per_second: float = 1.0):
+async def run_dashboard():
     await init_db()
-    delay = 1.0 / max(refresh_per_second, 0.1)
-
-    while True:
-        stats = await get_wrapper_stats()
-        events = await get_recent_events(limit=10)
-        layout = _make_layout(stats, events)
-        live.update(layout)
-        await asyncio.sleep(delay)
-
-
-def main():
-    with Live(console=console, screen=True, refresh_per_second=4) as live:
-        asyncio.run(_refresh(live))
+    with Live(console=console, refresh_per_second=1, screen=True) as live:
+        while True:
+            layout = await _build_layout()
+            live.update(layout)
+            await asyncio.sleep(1)
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(run_dashboard())

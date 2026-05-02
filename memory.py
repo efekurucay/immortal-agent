@@ -16,9 +16,12 @@ async def init_db():
                 timestamp TEXT,
                 event_type TEXT,
                 wrapper_name TEXT,
-                details TEXT
+                details TEXT,
+                latency_ms INTEGER,
+                success INTEGER,
+                health_score REAL
             )
-            """
+            """,
         )
         await db.execute(
             """
@@ -33,23 +36,8 @@ async def init_db():
                 health_score REAL DEFAULT 0.0,
                 code TEXT
             )
-            """
+            """,
         )
-
-        # Backwards-compatible schema upgrades
-        for stmt in [
-            "ALTER TABLE events ADD COLUMN latency_ms INTEGER",
-            "ALTER TABLE events ADD COLUMN success INTEGER",
-            "ALTER TABLE events ADD COLUMN health_score REAL",
-            "ALTER TABLE wrappers ADD COLUMN success_count INTEGER DEFAULT 0",
-            "ALTER TABLE wrappers ADD COLUMN total_latency_ms INTEGER DEFAULT 0",
-            "ALTER TABLE wrappers ADD COLUMN health_score REAL DEFAULT 0.0",
-        ]:
-            try:
-                await db.execute(stmt)
-            except Exception:
-                # Column probably already exists
-                pass
 
         await db.commit()
 
@@ -105,10 +93,7 @@ async def _compute_health(success_count: int, fail_count: int, total_latency_ms:
 
 
 async def record_call(wrapper_name: str, success: bool, latency_ms: int) -> float:
-    """Update wrapper stats after a call and return the new health score.
-
-    This maintains success/fail counts, total latency, and a composite health score.
-    """
+    """Update wrapper stats after a call and return the new health score."""
 
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
@@ -171,14 +156,10 @@ async def record_call(wrapper_name: str, success: bool, latency_ms: int) -> floa
 
 
 async def mark_alive(wrapper_name: str):
-    """Backwards-compatible helper for marking a wrapper alive (no latency info)."""
-
     await record_call(wrapper_name, True, 0)
 
 
 async def mark_dead(wrapper_name: str):
-    """Backwards-compatible helper for marking a wrapper dead (no latency info)."""
-
     await record_call(wrapper_name, False, 0)
 
 
@@ -186,7 +167,7 @@ async def get_wrapper_stats() -> list[dict]:
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         async with db.execute(
-            "SELECT * FROM wrappers ORDER BY health_score DESC, fail_count ASC"
+            "SELECT * FROM wrappers ORDER BY health_score DESC, fail_count ASC",
         ) as cursor:
             rows = await cursor.fetchall()
             return [dict(r) for r in rows]

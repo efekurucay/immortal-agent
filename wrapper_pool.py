@@ -7,8 +7,8 @@ from typing import Dict, Optional, Tuple
 from loguru import logger
 
 from wrappers import ALL_WRAPPERS
-from memory import record_call, log_event
-from config import MIN_ALIVE_LENGTH, SURVIVAL_PROMPT
+from memory import record_call, log_event, get_wrapper_stats
+from config import MIN_ALIVE_LENGTH
 
 
 CLOSED = "closed"
@@ -27,9 +27,8 @@ class CircuitState:
 class WrapperPool:
     """Manages all wrappers, health, and circuit breaker state.
 
-    Wrapper priority is primarily determined by the static order in ALL_WRAPPERS,
-    but dynamic health and circuit state decide whether a wrapper is eligible
-    at any given moment.
+    Wrapper priority starts from the static order in ALL_WRAPPERS,
+    then is refined by dynamic health and circuit state.
     """
 
     def __init__(self):
@@ -37,6 +36,8 @@ class WrapperPool:
         self.circuits: Dict[str, CircuitState] = {
             w.name: CircuitState() for w in self.wrappers
         }
+        # Static priority index for tie-breaking
+        self._static_priority = {w.name: i for i, w in enumerate(self.wrappers)}
 
     # ---------------------------------------------------------------------
     # Circuit breaker helpers
@@ -125,14 +126,35 @@ class WrapperPool:
             logger.error(f"[pool] {wrapper.name} failed after retries: {last_exc}")
         return None, None
 
+    async def _ordered_wrappers(self):
+        """Return wrappers ordered by dynamic health and static priority."""
+
+        try:
+            stats = await get_wrapper_stats()
+            health_by_name = {
+                s["name"]: float(s.get("health_score") or 0.0) for s in stats
+            }
+        except Exception:  # noqa: BLE001
+            health_by_name = {}
+
+        def sort_key(w):
+            # Higher health_score first, then static priority
+            return (
+                -health_by_name.get(w.name, 0.0),
+                self._static_priority.get(w.name, 0),
+            )
+
+        return sorted(self.wrappers, key=sort_key)
+
     async def send_with_fallback(self, prompt: str) -> Tuple[Optional[str], Optional[str]]:
         """Try each wrapper (respecting circuit state) until one responds.
 
         Returns (response_text, wrapper_name) or (None, None) if all fail.
         """
 
-        # TODO: in the future, order by dynamic health_score from DB.
-        for wrapper in self.wrappers:
+        wrappers = await self._ordered_wrappers()
+
+        for wrapper in wrappers:
             name = wrapper.name
             now = time.time()
 

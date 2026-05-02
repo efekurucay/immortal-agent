@@ -1,28 +1,28 @@
-import os
 import httpx
-from wrappers.base import BaseWrapper
+from .base import BaseWrapper
+from loguru import logger
 
 
 class NagaWrapper(BaseWrapper):
-    """Naga AC — free-tier OpenAI-compatible community proxy."""
-
     name = "naga"
-    _url = "https://api.naga.ac/v1/chat/completions"
-    _model = "gpt-3.5-turbo"
 
-    async def send(self, prompt: str):
-        key = os.environ.get("NAGA_API_KEY") or ""
-        if not key:
+    API_URL = "https://api.naga.ac/v1/chat/completions"
+    MODEL = "llama-3.1-8b-instruct"
+
+    async def send(self, prompt: str) -> str | None:
+        from config import API_KEYS
+        api_key = API_KEYS.get("naga", "")
+        headers = {"Content-Type": "application/json"}
+        if api_key:
+            headers["Authorization"] = f"Bearer {api_key}"
+        payload = {"model": self.MODEL, "messages": [{"role": "user", "content": prompt}]}
+        try:
+            async with httpx.AsyncClient(timeout=60) as client:
+                resp = await client.post(self.API_URL, headers=headers, json=payload)
+                if resp.status_code != 200:
+                    logger.error(f"[naga] {resp.status_code}: {resp.text[:200]}")
+                    return None
+                return resp.json()["choices"][0]["message"]["content"]
+        except Exception as e:
+            logger.error(f"[naga] send() failed: {e}")
             return None
-        async with httpx.AsyncClient(timeout=15) as c:
-            r = await c.post(
-                self._url,
-                headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
-                json={
-                    "model": self._model,
-                    "messages": [{"role": "user", "content": prompt}],
-                    "max_tokens": 64,
-                },
-            )
-            r.raise_for_status()
-            return r.json()["choices"][0]["message"]["content"]

@@ -4,10 +4,6 @@ from loguru import logger
 
 
 class SambanovaWrapper(BaseWrapper):
-    """
-    SambaNova Cloud — fast inference, free tier.
-    https://cloud.sambanova.ai
-    """
     name = "sambanova"
 
     API_URL = "https://api.sambanova.ai/v1/chat/completions"
@@ -17,18 +13,9 @@ class SambanovaWrapper(BaseWrapper):
         from config import API_KEYS
         api_key = API_KEYS.get("sambanova", "")
         if not api_key:
-            logger.warning("[sambanova] No API key configured.")
             return None
-
-        headers = {
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json",
-        }
-        payload = {
-            "model": self.MODEL,
-            "messages": [{"role": "user", "content": prompt}],
-            "stream": False,
-        }
+        headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+        payload = {"model": self.MODEL, "messages": [{"role": "user", "content": prompt}]}
         try:
             async with httpx.AsyncClient(timeout=60) as client:
                 resp = await client.post(self.API_URL, headers=headers, json=payload)

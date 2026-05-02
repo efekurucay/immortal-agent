@@ -1,44 +1,53 @@
-# ---------------------------------------------------------------------------
-# immortal-agent — configuration example
-# Copy to config.py and fill in your keys.
-# Keys left empty ("") are simply skipped by the wrapper pool.
-# ---------------------------------------------------------------------------
+"""
+config.example.py — Copy to config.py and fill in your API keys.
 
-# --- Survival loop ---
-PING_INTERVAL   = 60      # seconds between liveness pings
-MIN_ALIVE_LENGTH = 10     # minimum char count to consider a response valid
+Leave a key as "" to skip that provider (the agent will route around it).
+At minimum, have 1-2 keys to bootstrap. Ollama works with no key at all.
+"""
 
-# ---------------------------------------------------------------------------
-# API keys  (all optional — fill only what you have)
-# ---------------------------------------------------------------------------
+# ── Timing ────────────────────────────────────────────────────────────────────
+PING_INTERVAL: int = 60        # seconds between alive pings
+COOLDOWN: int = 120            # seconds to wait after total failure
+MAX_REPAIR_ATTEMPTS: int = 5   # max self-repair tries before cooldown
 
-# Local
-# OLLAMA_MODEL = "llama3"          # override in env or here
+# ── Prompts ───────────────────────────────────────────────────────────────────
+SURVIVAL_PROMPT: str = "Reply with exactly: I AM ALIVE"
 
-# Fastest / free-tier inference
-GROQ_API_KEY       = ""
-CEREBRAS_API_KEY   = ""
-SAMBANOVA_API_KEY  = ""
-FIREWORKS_API_KEY  = ""   # https://fireworks.ai
-LEPTON_API_KEY     = ""   # https://lepton.ai
+# ── Misc ──────────────────────────────────────────────────────────────────────
+MIN_ALIVE_LENGTH: int = 5
 
-# Aggregators
-OPENROUTER_API_KEY = ""   # https://openrouter.ai
-DEEPINFRA_API_KEY  = ""   # https://deepinfra.com
-NOVITA_API_KEY     = ""   # https://novita.ai
-NAGA_API_KEY       = ""   # https://naga.ac (community)
+# ── API Keys ──────────────────────────────────────────────────────────────────
+# Add keys for any services you want to use. Empty string = skip that provider.
+API_KEYS: dict[str, str] = {
+    # Local — no key needed
+    "ollama": "",
 
-# SDK / managed
-HUGGINGFACE_TOKEN  = ""
-TOGETHER_API_KEY   = ""
-MISTRAL_API_KEY    = ""
-COHERE_API_KEY     = ""
+    # Free tier inference
+    "groq": "",           # console.groq.com — free, very fast
+    "cerebras": "",       # cloud.cerebras.ai — free tier
+    "chutes": "",         # chutes.ai — free, no key required even
+    "scaleway": "",       # console.scaleway.com — free Llama tier
+    "hyperbolic": "",     # app.hyperbolic.xyz — free credits
+    "klusterai": "",      # kluster.ai — free tier
+    "aimlapi": "",        # aimlapi.com — free tier
+    "lepton": "",         # leptonai.com — free
+    "naga": "",           # naga.ac — free proxy
+    "novita": "",         # novita.ai — free tier
+    "fireworks": "",      # fireworks.ai — free credits
+    "deepinfra": "",      # deepinfra.com — free tier
 
-# Key-based providers
-GROK_API_KEY       = ""   # xAI
-GEMINI_API_KEY     = ""
+    # Aggregators (one key = many models)
+    "openrouter": "",     # openrouter.ai — free models available
+    "huggingface": "",    # huggingface.co — Serverless Inference API
+    "together": "",       # together.ai — free trial credits
 
-# Cookie-based (unofficial — use at your own risk)
-CHATGPT_COOKIE     = ""
-CLAUDE_COOKIE      = ""
-PERPLEXITY_COOKIE  = ""
+    # Paid providers (fallback of last resort)
+    "sambanova": "",      # sambanova.ai
+    "mistral": "",        # mistral.ai
+    "cohere": "",         # cohere.com
+    "gemini": "",         # aistudio.google.com
+    "chatgpt": "",        # platform.openai.com
+    "claude": "",         # console.anthropic.com
+    "grok": "",           # console.x.ai
+    "perplexity": "",     # perplexity.ai/api
+}

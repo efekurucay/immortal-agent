@@ -1,4 +1,4 @@
-"""Wrapper registry — order defines static priority (lower = higher priority)."""
+"""Wrapper registry — order defines static priority (lower index = higher priority)."""
 from wrappers.base import BaseWrapper
 
 # ── Free / no-auth / local first ──────────────────────────────────────────────

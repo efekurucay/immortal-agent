@@ -4,10 +4,6 @@ from loguru import logger
 
 
 class GrokWrapper(BaseWrapper):
-    """
-    Grok (xAI) — official API, free tier available.
-    https://console.x.ai
-    """
     name = "grok"
 
     API_URL = "https://api.x.ai/v1/chat/completions"
@@ -17,17 +13,9 @@ class GrokWrapper(BaseWrapper):
         from config import API_KEYS
         api_key = API_KEYS.get("grok", "")
         if not api_key:
-            logger.warning("[grok] No API key configured.")
             return None
-
-        headers = {
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json",
-        }
-        payload = {
-            "model": self.MODEL,
-            "messages": [{"role": "user", "content": prompt}],
-        }
+        headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+        payload = {"model": self.MODEL, "messages": [{"role": "user", "content": prompt}]}
         try:
             async with httpx.AsyncClient(timeout=60) as client:
                 resp = await client.post(self.API_URL, headers=headers, json=payload)

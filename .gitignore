@@ -1,0 +1,29 @@
+# Credentials - never commit
+config.py
+*.db
+*.log
+
+# Generated wrappers (runtime artifacts)
+wrappers/*_generated.py
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Environments
+.venv/
+venv/
+env/
+.env
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store

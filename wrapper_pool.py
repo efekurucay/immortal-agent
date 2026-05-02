@@ -1,7 +1,7 @@
 import asyncio
 import random
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Dict, Optional, Tuple
 
 from loguru import logger
@@ -15,6 +15,11 @@ CLOSED = "closed"
 OPEN = "open"
 HALF_OPEN = "half_open"
 
+# Canary settings
+CANARY_CALLS = 5          # How many calls to observe before full promotion
+CANARY_MIN_SUCCESS = 0.6  # Min success rate to promote (60%)
+CANARY_MAX_FAILS = 3      # If consecutive fails exceed this, quarantine immediately
+
 
 @dataclass
 class CircuitState:
@@ -24,11 +29,21 @@ class CircuitState:
     opened_until: float = 0.0
 
 
-class WrapperPool:
-    """Manages all wrappers, health, and circuit breaker state.
+@dataclass
+class CanaryState:
+    """Tracks probationary period for newly generated wrappers."""
+    total: int = 0
+    successes: int = 0
+    consecutive_fails: int = 0
+    promoted: bool = False
+    quarantined: bool = False
 
-    Wrapper priority starts from the static order in ALL_WRAPPERS,
-    then is refined by dynamic health and circuit state.
+
+class WrapperPool:
+    """Manages all wrappers, health, circuit breaker, and canary state.
+
+    Static wrappers (ALL_WRAPPERS) are trusted from the start.
+    Generated wrappers enter canary mode and must earn promotion.
     """
 
     def __init__(self):
@@ -36,12 +51,13 @@ class WrapperPool:
         self.circuits: Dict[str, CircuitState] = {
             w.name: CircuitState() for w in self.wrappers
         }
-        # Static priority index for tie-breaking
         self._static_priority = {w.name: i for i, w in enumerate(self.wrappers)}
+        # canary tracking — only populated for dynamically added wrappers
+        self._canary: Dict[str, CanaryState] = {}
 
-    # ---------------------------------------------------------------------
+    # ------------------------------------------------------------------
     # Circuit breaker helpers
-    # ---------------------------------------------------------------------
+    # ------------------------------------------------------------------
 
     def _state_for(self, name: str) -> CircuitState:
         if name not in self.circuits:
@@ -52,9 +68,7 @@ class WrapperPool:
         state = self._state_for(name)
         if state.state == OPEN:
             if now < state.opened_until:
-                # Still in open window, skip this wrapper
                 return True
-            # Open window expired → half-open
             state.state = HALF_OPEN
         return False
 
@@ -82,9 +96,89 @@ class WrapperPool:
                 f"[pool] Circuit opened for {name} after {state.failures} failures."
             )
 
-    # ---------------------------------------------------------------------
+    # ------------------------------------------------------------------
+    # Canary helpers
+    # ------------------------------------------------------------------
+
+    def add_wrapper(self, wrapper_class) -> None:
+        """Add a dynamically generated wrapper in canary mode."""
+        instance = wrapper_class()
+        self.wrappers.append(instance)
+        self.circuits[instance.name] = CircuitState()
+        self._canary[instance.name] = CanaryState()
+        # Give canary a low static priority so it's tried last
+        self._static_priority[instance.name] = len(self.wrappers) + 1000
+        logger.info(f"[pool] Canary wrapper added: {instance.name}")
+
+    def _is_quarantined(self, name: str) -> bool:
+        cs = self._canary.get(name)
+        return cs is not None and cs.quarantined
+
+    def _record_canary(self, name: str, success: bool) -> None:
+        """Update canary stats and decide promotion or quarantine."""
+        cs = self._canary.get(name)
+        if cs is None or cs.promoted or cs.quarantined:
+            return
+
+        cs.total += 1
+        if success:
+            cs.successes += 1
+            cs.consecutive_fails = 0
+        else:
+            cs.consecutive_fails += 1
+
+        # Immediate quarantine on too many consecutive fails
+        if cs.consecutive_fails >= CANARY_MAX_FAILS:
+            cs.quarantined = True
+            logger.error(
+                f"[pool][canary] {name} quarantined after "
+                f"{cs.consecutive_fails} consecutive failures."
+            )
+            asyncio.ensure_future(
+                log_event("wrapper_quarantined", name, details={"reason": "consecutive_fails"})
+            )
+            return
+
+        if cs.total >= CANARY_CALLS:
+            rate = cs.successes / cs.total
+            if rate >= CANARY_MIN_SUCCESS:
+                cs.promoted = True
+                # Boost priority to normal range
+                self._static_priority[name] = len(ALL_WRAPPERS) + 1
+                logger.success(
+                    f"[pool][canary] {name} promoted! success_rate={rate:.0%}"
+                )
+                asyncio.ensure_future(
+                    log_event("wrapper_promoted", name, details={"success_rate": rate})
+                )
+            else:
+                cs.quarantined = True
+                logger.error(
+                    f"[pool][canary] {name} quarantined after canary period. "
+                    f"success_rate={rate:.0%} < {CANARY_MIN_SUCCESS:.0%}"
+                )
+                asyncio.ensure_future(
+                    log_event(
+                        "wrapper_quarantined",
+                        name,
+                        details={"reason": "low_success_rate", "rate": rate},
+                    )
+                )
+
+    def canary_status(self, name: str) -> Optional[str]:
+        """Return human-readable canary status for dashboard."""
+        cs = self._canary.get(name)
+        if cs is None:
+            return None  # trusted static wrapper
+        if cs.quarantined:
+            return "quarantined"
+        if cs.promoted:
+            return "promoted"
+        return f"canary {cs.total}/{CANARY_CALLS}"
+
+    # ------------------------------------------------------------------
     # Core send logic
-    # ---------------------------------------------------------------------
+    # ------------------------------------------------------------------
 
     async def _call_with_retry(
         self,
@@ -95,10 +189,7 @@ class WrapperPool:
         base_delay: float = 0.1,
         budget_s: float = 3.0,
     ) -> Tuple[Optional[str], Optional[int]]:
-        """Call wrapper.send with bounded retries and jitter.
-
-        Returns (response_text or None, latency_ms or None).
-        """
+        """Call wrapper.send with bounded retries and jitter."""
 
         attempt = 0
         start_overall = time.perf_counter()
@@ -127,7 +218,11 @@ class WrapperPool:
         return None, None
 
     async def _ordered_wrappers(self):
-        """Return wrappers ordered by dynamic health and static priority."""
+        """Return wrappers ordered by dynamic health and static priority.
+
+        Quarantined wrappers are excluded entirely.
+        Canary wrappers appear last (high static priority index).
+        """
 
         try:
             stats = await get_wrapper_stats()
@@ -138,19 +233,18 @@ class WrapperPool:
             health_by_name = {}
 
         def sort_key(w):
-            # Higher health_score first, then static priority
             return (
                 -health_by_name.get(w.name, 0.0),
                 self._static_priority.get(w.name, 0),
             )
 
-        return sorted(self.wrappers, key=sort_key)
+        return [
+            w for w in sorted(self.wrappers, key=sort_key)
+            if not self._is_quarantined(w.name)
+        ]
 
     async def send_with_fallback(self, prompt: str) -> Tuple[Optional[str], Optional[str]]:
-        """Try each wrapper (respecting circuit state) until one responds.
-
-        Returns (response_text, wrapper_name) or (None, None) if all fail.
-        """
+        """Try each wrapper (respecting circuit + quarantine) until one responds."""
 
         wrappers = await self._ordered_wrappers()
 
@@ -169,6 +263,9 @@ class WrapperPool:
                 and len(response.strip()) >= MIN_ALIVE_LENGTH
             )
 
+            # Update canary stats if applicable
+            self._record_canary(name, success)
+
             if success:
                 self._on_success(name)
                 health = await record_call(name, True, latency_ms or 0)
@@ -181,7 +278,6 @@ class WrapperPool:
                 )
                 return response, name
 
-            # Failure path
             self._on_failure(name, now)
             health = await record_call(name, False, latency_ms or 0)
             await log_event(
@@ -192,22 +288,18 @@ class WrapperPool:
                 health_score=health,
             )
 
-        # All wrappers failed
         return None, None
 
-    # ---------------------------------------------------------------------
-    # Backwards-compatible helpers used by agent.self_repair
-    # ---------------------------------------------------------------------
+    # ------------------------------------------------------------------
+    # Backwards-compatible helpers
+    # ------------------------------------------------------------------
 
     async def get_live_wrapper(self):
-        """Return the first wrapper that passes a basic is_alive check.
-
-        This is only used for self-repair code generation. It ignores
-        circuit state on purpose to maximize chances of finding *any*
-        working model.
-        """
+        """Return first wrapper that passes is_alive. Used for self-repair codegen."""
 
         for wrapper in self.wrappers:
+            if self._is_quarantined(wrapper.name):
+                continue
             try:
                 alive = await wrapper.is_alive(min_length=MIN_ALIVE_LENGTH)
             except Exception:  # noqa: BLE001
@@ -219,21 +311,15 @@ class WrapperPool:
 
         return None
 
-    def reset_dead(self):  # kept for backwards compatibility
-        """No-op placeholder, retained to avoid breaking existing code.
-
-        Circuit state is time-based and will naturally heal.
-        """
-
+    def reset_dead(self):
+        """No-op placeholder, retained for backwards compatibility."""
         return None
 
     def all_dead(self) -> bool:
-        """Return True if all circuits are currently open.
-
-        Not used by the main loop today, but can be helpful for diagnostics.
-        """
-
+        """Return True if all non-quarantined circuits are currently open."""
         now = time.time()
         return all(
-            self._should_skip(w.name, now) for w in self.wrappers
+            self._should_skip(w.name, now)
+            for w in self.wrappers
+            if not self._is_quarantined(w.name)
         )

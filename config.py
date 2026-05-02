@@ -1,7 +1,8 @@
 # =============================================================
 # IMMORTAL AGENT — CONFIG
-# Fill in your browser cookies for each service.
-# Use secondary/burner accounts — not your main accounts.
+# Fill in your browser cookies and/or API keys.
+# For cookie-based services: use secondary/burner accounts.
+# For API-key-based services: free tiers are sufficient.
 # =============================================================
 
 COOKIES = {
@@ -21,10 +22,23 @@ COOKIES = {
     },
 }
 
+API_KEYS = {
+    "openrouter": "",    # https://openrouter.ai
+    "groq": "",          # https://console.groq.com
+    "mistral": "",       # https://console.mistral.ai
+    "cohere": "",        # https://dashboard.cohere.com
+    "together": "",      # https://api.together.xyz
+    "huggingface": "",   # https://huggingface.co/settings/tokens
+}
+
+# Ollama local endpoint (no key needed)
+OLLAMA_BASE_URL = "http://localhost:11434"
+OLLAMA_MODEL = "llama3.2"  # change to any model you have pulled
+
 # How long to wait between survival pings (seconds)
 PING_INTERVAL = 60
 
-# How long to wait before retrying a dead wrapper (seconds)
+# How long to wait before retrying after total failure (seconds)
 COOLDOWN = 300
 
 # Minimum response length to consider alive
